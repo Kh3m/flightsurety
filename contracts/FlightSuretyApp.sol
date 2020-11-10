@@ -5,6 +5,7 @@ pragma solidity ^0.4.25;
 // More info: https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2018/november/smart-contract-insecurity-bad-arithmetic/
 
 import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "./FlightSuretyData.sol";
 
 /************************************************** */
 /* FlightSurety Smart Contract                      */
@@ -12,6 +13,11 @@ import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 contract FlightSuretyApp {
     using SafeMath for uint256; // Allow SafeMath functions to be called for all uint256 types (similar to "prototype" in Javascript)
 
+    // for flight registration
+    event FlightReg(address airline, string flightNumber, uint256 timestamp);
+    // for insurance payout credit
+    event CreditInsurance(address airline, string flightNumber, uint256 timestamp);
+    
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
@@ -24,7 +30,10 @@ contract FlightSuretyApp {
     uint8 private constant STATUS_CODE_LATE_TECHNICAL = 40;
     uint8 private constant STATUS_CODE_LATE_OTHER = 50;
 
+    FlightSuretyData flightSuretyData;
     address private contractOwner;          // Account used to deploy contract
+    // threshold 
+    uint multicalls = 4;
 
     struct Flight {
         bool isRegistered;
@@ -33,8 +42,9 @@ contract FlightSuretyApp {
         address airline;
     }
     mapping(bytes32 => Flight) private flights;
+    uint256 public constant regFee = 10 ether;
+    mapping(address => bool) private voted; 
 
- 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
     /********************************************************************************************/
@@ -73,10 +83,13 @@ contract FlightSuretyApp {
     */
     constructor
                                 (
+                                    address contractAddress
                                 ) 
                                 public 
     {
         contractOwner = msg.sender;
+
+        flightSuretyData = FlightSuretyData(contractAddress);
     }
 
     /********************************************************************************************/
@@ -85,10 +98,14 @@ contract FlightSuretyApp {
 
     function isOperational() 
                             public 
-                            pure 
                             returns(bool) 
     {
-        return true;  // Modify to call data contract's status
+        return flightSuretyData.isOperational();  // Modify to call data contract's status
+    }
+
+    function totalAirlinesReg() public view returns(uint) 
+    {
+        return flightSuretyData.multiCallsLength();
     }
 
     /********************************************************************************************/
@@ -101,13 +118,27 @@ contract FlightSuretyApp {
     *
     */   
     function registerAirline
-                            (   
+                            (  
+                                address airline 
                             )
                             external
-                            pure
+                            requireIsOperational
                             returns(bool success, uint256 votes)
     {
-        return (success, 0);
+        require(airline != address(0), "valid address for account required");
+        require(flightSuretyData.getOperatingStatus(msg.sender), "Operational status is false, submit atleast 5 ether");
+        require(!flightSuretyData.getRegistrationStatus(airline), "No duplicate airline required. Already registered");
+
+        uint accounts = totalAirlinesReg();
+
+        if (accounts < multicalls){
+            // Register airline directly in this case
+            flightSuretyData.registerAirline(airline, false);
+            emit AirlineRegistered(airline);
+            return (true, 0);
+        } else {
+            emit AirlineRegistrationRequestVote(airline);
+        }
     }
 
 
@@ -115,41 +146,41 @@ contract FlightSuretyApp {
     * @dev Register a future flight for insuring.
     *
     */  
-    function registerFlight
-                                (
-                                    string memory airline,
-                                    bytes32 name,
-                                    uint256 statusCode
-                                )
-                                external
-                                pure
+    function registerFlight(uint256 timestamp, string flightNumber ) external
+        requireIsOperational
     {
+        require(flightSuretyData.getOperatingStatus(msg.sender), "Please fund airline");
+        require(!flightSuretyData.getFlightStatus(msg.sender, flightNumber, timestamp),"Duplicate, flight exists");
+        flightSuretyData.addFlight(msg.sender, flightNumber, timestamp);
 
-        flights[name].isRegistered = true;
-        flights[name].statusCode = statusCode;
-        flights[name].updatedTimestamp = now;
-        flights[name].airline = airline;
+        emit FlightReg(msg.sender, flightNumber, timestamp);
+
     }
     
    /**
     * @dev Called after oracle has updated flight status
     *
     */  
-    function processFlightStatus
-                                (
-                                    address airline,
-                                    string memory flight,
-                                    uint256 timestamp,
-                                    uint8 statusCode
-                                )
-                                internal
-                                pure
+    function processFlightStatus(
+        address airline,
+        string memory flight,
+        uint256 timestamp,
+        uint8 statusCode,
+        uint8 index
+    )
+        internal
     {
-        // flights[name].isRegistered = true;
-        // flights[name].statusCode = statusCode;
-        // flights[name].updatedTimestamp = now;
-        // flights[name].airline = airline;
+        bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp)); 
+        oracleResponses[key].isOpen = false;
+        flightSuretyData.setFlightStatusCode(airline, flight, timestamp, statusCode);
+
+        if(statusCode == 20){
+            flightSuretyData.creditInsurees(airline, flight, timestamp);
+
+            emit CreditInsurance(airline, flight, timestamp);
+        }
     }
+
 
 
     // Generate a request for oracles to fetch flight information
@@ -217,7 +248,10 @@ contract FlightSuretyApp {
     // they fetch data and submit a response
     event OracleRequest(uint8 index, address airline, string flight, uint256 timestamp);
 
-
+    // mine
+    event AirlineRegistrationRequestVote(address account);
+    event AirlineRegistered(address account);
+    
     // Register an oracle with the contract
     function registerOracle
                             (
@@ -281,7 +315,7 @@ contract FlightSuretyApp {
             emit FlightStatusInfo(airline, flight, timestamp, statusCode);
 
             // Handle flight status as appropriate
-            processFlightStatus(airline, flight, timestamp, statusCode);
+            processFlightStatus(airline, flight, timestamp, statusCode, index);
         }
     }
 
@@ -292,7 +326,6 @@ contract FlightSuretyApp {
                             string flight,
                             uint256 timestamp
                         )
-                        pure
                         internal
                         returns(bytes32) 
     {
@@ -345,4 +378,9 @@ contract FlightSuretyApp {
 
 // endregion
 
+// mine
+    function getFlightStatus(address airline, string flightNumber, uint256 timestamp) public view returns(bool){
+        bool status =  flightSuretyData.getFlightStatus(airline, flightNumber, timestamp);
+        return status;
+    }
 }   
