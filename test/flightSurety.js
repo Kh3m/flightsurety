@@ -2,7 +2,7 @@
 var Test = require('../config/testConfig.js');
 var BigNumber = require('bignumber.js');
 
-contract('Flight Surety Tests', async (accounts) => {
+contract('Flight Surety Tests - Operations Control', async (accounts) => {
 
   var config;
   before('setup contract', async () => {
@@ -14,11 +14,19 @@ contract('Flight Surety Tests', async (accounts) => {
   /* Operations and Settings                                                              */
   /****************************************************************************************/
 
-  it(`(multiparty) has correct initial isOperational() value`, async function () {
+  it(`(multiparty) Data contract has correct initial isOperational() value`, async function () {
 
     // Get operating status
     let status = await config.flightSuretyData.isOperational.call();
     assert.equal(status, true, "Incorrect initial operating status value");
+
+  });
+
+  it(`(multiparty) App contract has correct initial isOperational() value`, async function () {
+
+    // Get operating status
+    let status = await config.flightSuretyApp.isOperational.call();
+    assert.equal(status, true, "App Contract: Incorrect initial operating status value");
 
   });
 
@@ -59,7 +67,7 @@ contract('Flight Surety Tests', async (accounts) => {
       let reverted = false;
       try 
       {
-          await config.flightSurety.setTestingMode(true);
+          await config.flightSuretyData.setAirlineOperatingStatus(config.owner, true);
       }
       catch(e) {
           reverted = true;
@@ -70,25 +78,4 @@ contract('Flight Surety Tests', async (accounts) => {
       await config.flightSuretyData.setOperatingStatus(true);
 
   });
-
-  it('(airline) cannot register an Airline using registerAirline() if it is not funded', async () => {
-    
-    // ARRANGE
-    let newAirline = accounts[2];
-
-    // ACT
-    try {
-        await config.flightSuretyApp.registerAirline(newAirline, {from: config.firstAirline});
-    }
-    catch(e) {
-
-    }
-    let result = await config.flightSuretyData.isAirline.call(newAirline); 
-
-    // ASSERT
-    assert.equal(result, false, "Airline should not be able to register another airline if it hasn't provided funding");
-
-  });
- 
-
 });

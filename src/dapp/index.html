@@ -1,5 +1,24 @@
 <!doctype html>
 <html lang="en">
+<style>
+    table {
+        font-family: arial, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+    }
+    
+    td, th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 8px;
+        background-color: rgb(156, 45, 230);
+    }
+    
+    tr:nth-child(even) {
+        background-color: #dddddd;
+        
+    }
+</style>
 
 <head>
     <meta charset="utf-8">
@@ -19,14 +38,80 @@
         </button>
     </nav>
 
+    <div>
+
+        
+    </div>
+
+
     <main class="container">
 
         <div id="display-wrapper" class="top-20">
-        </div>
+        <!-- </div>
         <div class="row top-20">
             <label class="form">Flight</label> <input type="text" id="flight-number"> <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
-        </div>
+        </div> -->
     </main>
+
+
+    <main class="section">
+        <h1>User Account</h1>
+        <br>
+
+        <div id="yourAddress" style="font-size: large;"> 
+        </div>
+
+        <div id = "creditAmount"  class = "navbar-brand" style="font-size: large;"> 
+        </div>
+
+        <div>
+            <label class="form">Withdrawal Amount(ETH)</label> <input id='withdraw-amount' type="number" value = "0" step="0.01"/>
+            <btn class="btn btn-primary" id="withdraw-credit">Make Withdrawal</btn>
+        </div>
+
+        <br>
+        <br>
+        <table id = "yourFlights">
+            <h3>Insurance Purchased</h3>
+                <tr>
+                  <th>Flight Number</th>
+                  <th>Airline</th>
+                  <th>Departure Time</th>
+                  <th> Insurance Amount (ETH)</th>
+                  <th>Status</th>
+                </tr>
+        </table>
+
+        <!-- <div>
+            <label class="form">Flight</label> <input type="text" id="flight-number"> <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
+        </div> -->
+    </main>
+    <br>
+
+    <main class="section" id = "flights">
+        <table id = "buyInsurance">
+            <h1>Purchase Insurance</h1>
+            <div class="row top-20">
+                <label class="form">Flight</label> <select id="flight-number-list"> </select>
+                <label class="form">Depature Time </label> <select id='departure-date' type="date"></select> 
+                <label class="form">Insurance Amount(ETH)</label> <input id='insurance-amount' type="number" value = "0.5" min="0.01" max="1" step="0.01"/>
+                <btn class="btn btn-primary" id="purchase-insurance">Purchase Insurance</btn>
+            </div>
+        </table>
+
+        <br>
+        <br>
+        <table id = "flightTable">
+            <h3>Available Flights</h3>
+                <tr>
+                  <th>Flight Number</th>
+                  <th>Airline</th>
+                  <th>Departure Time</th>
+                </tr>
+        </table>
+
+    </main>
+
 
 </body>
 

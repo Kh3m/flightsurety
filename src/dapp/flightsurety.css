@@ -12,6 +12,15 @@ body {
     padding: 40px;
 }
 
+.section {
+    margin: 10px;
+
+    background-color: #000;
+    opacity: 0.9;
+    color: #fff;
+    padding: 40px;
+}
+
 .top-20 {
     margin-top: 20px;
 }
@@ -36,6 +45,7 @@ section {
 label.form {
     font-size: 14px;
     margin-right: 20px;
+    margin-left: 20px;
 }
 input {
     margin-right: 30px;

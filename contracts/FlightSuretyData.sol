@@ -12,72 +12,72 @@ contract FlightSuretyData {
     address private contractOwner;                                      // Account used to deploy contract
     bool private operational = true;                                    // Blocks all state changes throughout the contract if false
 
-
-    // mine
+    
+    //data variables for airlines and MultiCalls
+    address[] multiCalls = new address[](0);
+    
     struct Airlines{
         bool isRegistered;
         bool isOperational;
     }
 
-    address[] multiCalls = new address[](0);
-
-    struct Voters {
+    struct Voters{
         address[] airlineVoter;
-        mapping(address => bool) results;
+        mapping(address => bool) voteResults;
     }
 
-    struct insureeDetail {
+    // for passenger
+    struct insureeInfo{
         uint256 insuranceAmount;
         uint256 payout;
     }
 
-    struct flightDetail {
+    // for flight
+    struct flightInfo{
         bool isRegistered; 
         uint256 totalPremium;
         uint256 statusCode;
     }
 
-    mapping(address => uint256) private voteCount;
     mapping(address => Airlines) airlines;
-    mapping(address => uint256) private funding;
     mapping(address => Voters) voters;
- 
+    mapping(address => uint256) private voteCount;
+    mapping(address => uint256) private funding;
 
+    // operational control
     mapping(address => uint256) private authorizedCaller;
-    
+
+    // passenger
     mapping(address => uint256) accountCredit;   //keep track of each passenger's account balance
 
     // Per flight info
     mapping(address => bytes32 []) flightList; 
-    mapping(address => mapping(bytes32 => flightDetail)) flights;     
-    mapping(address => mapping(bytes32 => address [])) insureeList;  
-    mapping(address => mapping(bytes32 => mapping(address => insureeDetail))) insurees;    
+    mapping(address => mapping(bytes32 => flightInfo)) flights;     // flight info for each airline
+    mapping(address => mapping(bytes32 => address [])) insureeList;   //store the passenger addresses for each flight
+    mapping(address => mapping(bytes32 => mapping(address => insureeInfo))) insurees;    //For each flight, it keeps track of premium and payout for each insuree
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
-    event AuthorizedContract(address contractAddress);
-    event DeAuthorizedContract(address contractAddress);
 
+    event AuthorizedContract(address authContract);
+    event DeAuthorizedContract(address authContract);
 
     /**
     * @dev Constructor
     *      The deploying account becomes contractOwner
     */
-    constructor
-                                (
-                                ) 
-                                public 
+    constructor() public 
     {
         contractOwner = msg.sender;
-
-        // Initialize the first airline
+        
         airlines[msg.sender] = Airlines({
             isRegistered: true,
             isOperational: false
         }); 
 
         multiCalls.push(msg.sender);
+
     }
 
     /********************************************************************************************/
@@ -107,12 +107,12 @@ contract FlightSuretyData {
         _;
     }
 
-    // is caller auth
-    modifier onlyAuthorizedCaller()
+    modifier isCallerAuthorized()
     {
         require(authorizedCaller[msg.sender] == 1, "Caller is not authorized");
         _;
     }
+
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
@@ -123,10 +123,7 @@ contract FlightSuretyData {
     *
     * @return A bool that is the current operating status
     */      
-    function isOperational() 
-                            public 
-                            view 
-                            returns(bool) 
+    function isOperational() public view returns(bool) 
     {
         return operational;
     }
@@ -137,16 +134,11 @@ contract FlightSuretyData {
     *
     * When operational mode is disabled, all write transactions except for this one will fail
     */    
-    function setOperatingStatus
-                            (
-                                bool mode
-                            ) 
-                            external
-                            requireContractOwner 
+    function setOperatingStatus(bool mode) external
+        requireContractOwner 
     {
         operational = mode;
     }
-
 
     function authorizeCaller(address contractAddress) external
         requireContractOwner
@@ -158,96 +150,242 @@ contract FlightSuretyData {
     function deauthorizeContract(address contractAddress) external
         requireContractOwner
     {
-        // deauthorize contract address
         delete authorizedCaller[contractAddress];
         emit DeAuthorizedContract(contractAddress);
     } 
 
-    function setAirlineOperateStatus(address account, bool status) private
+    /********************************************************************************************/
+    /*                                     SMART CONTRACT FUNCTIONS                             */
+    /********************************************************************************************/
+
+    function multiCallsLength() external 
+        requireIsOperational
+        isCallerAuthorized 
+        returns(uint)
+    {
+        return multiCalls.length;
+    }
+
+    function ListRegistredAirline() external 
+        requireIsOperational
+        isCallerAuthorized 
+        returns(address[])
+    {
+        return multiCalls;
+    }
+
+    function addVoterCounter(address newAirline, uint count) external
+        requireIsOperational
+        isCallerAuthorized
+    {
+        voteCount[newAirline] = voteCount[newAirline].add(count); 
+    }
+
+    function getVoteCounter(address account) external 
+        requireIsOperational 
+        isCallerAuthorized
+        returns(uint)
+    {
+        return voteCount[account];
+    }
+
+    function resetVoteCounter(address account) external 
+        requireIsOperational
+        isCallerAuthorized
+    {
+        delete voteCount[account];
+    }
+
+    function addVoters(address newAirline, address account, bool vote) external
+        requireIsOperational
+        isCallerAuthorized
+    {
+        voters[newAirline].airlineVoter.push(account);
+        voters[newAirline].voteResults[account] = vote;
+    }
+
+    function getVoter(address account) external 
+        requireIsOperational
+        isCallerAuthorized
+        returns(address[])
+    {
+        address[] memory v = voters[account].airlineVoter;
+        return v;
+    }
+
+    function getVoterLength(address account) external 
+        requireIsOperational
+        isCallerAuthorized
+        returns(uint)
+    {
+        return voters[account].airlineVoter.length;
+    }
+
+    function getAirlineRegistrationStatus(address account) external 
+        requireIsOperational
+        isCallerAuthorized
+        returns(bool)
+    {
+        return airlines[account].isRegistered;
+    }
+
+    function setAirlineOperatingStatus(address account, bool status) private
         requireIsOperational
     {
         airlines[account].isOperational = status;
     }
 
-    /********************************************************************************************/
-    /*                                     SMART CONTRACT FUNCTIONS                             */
-    /********************************************************************************************/
+    function getAirlineOperatingStatus(address account) external
+        requireIsOperational
+        isCallerAuthorized
+        returns(bool)
+    {
+        return airlines[account].isOperational;
+    }
+
 
    /**
     * @dev Add an airline to the registration queue
     *      Can only be called from FlightSuretyApp contract
     *
     */   
-    function registerAirline
-                            (   
-                                address account, bool paid
-                            )
-                            external
-
+    function registerAirline(address account, bool funded) external
         requireIsOperational
-        onlyAuthorizedCaller
+        isCallerAuthorized
     {
         airlines[account] = Airlines({
             isRegistered: true,           // isRegistered is always true for a registered airline
-            isOperational: paid  // isOperational is only true when airline has submited 10 Ether 
+            isOperational: funded  // isOperational is only true when airline has submited 10 Ether 
         });
 
         multiCalls.push(account);
+
     }
+
+    function addFlight(address airline,string newFlight, uint256 timestamp) external
+        requireIsOperational
+        isCallerAuthorized
+    {
+        bytes32 key = keccak256(abi.encodePacked(newFlight, timestamp));
+        flightList[airline].push(key);
+        flights[airline][key].isRegistered = true;
+        flights[airline][key].totalPremium = 0;
+        flights[airline][key].statusCode = 0;
+
+    }
+
+    function getFlightStatus(address airline, string flightNumber, uint256 timestamp) external
+        requireIsOperational
+        isCallerAuthorized
+        returns(bool)
+    {
+        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
+        bool status = flights[airline][key].isRegistered;
+        return status;
+    }
+
+    function addFlightStatusCode(address airline,string newFlight, uint256 timestamp, uint256 statusCode) external
+        requireIsOperational
+        isCallerAuthorized
+    {
+        bytes32 key = keccak256(abi.encodePacked(newFlight, timestamp));
+        flights[airline][key].statusCode = statusCode;
+
+    }
+
+    function getFlightStatusCode(address airline, string flightNumber, uint256 timestamp) external
+        requireIsOperational
+        isCallerAuthorized
+        returns(uint256)
+    {
+        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
+        uint256 status = flights[airline][key].statusCode;
+        return status;
+    }
+
 
    /**
     * @dev Buy insurance for a flight
     *
     */   
-    function buy
-                            (   
-                                address airline,
-                                string flightNumber,
-                                uint256 time,
-                                address insuranceReceiver,
-                                uint256 amount             
-                            )
-                            external
-                            payable
+    function buy(address airline, string flightNumber, uint256 timestamp, address insuree, uint256 amount) external payable
         requireIsOperational
-        onlyAuthorizedCaller
+        isCallerAuthorized
     {
-        bytes32 key = keccak256(abi.encodePacked(flightNumber, time));
+        //increment total premiums collected for the flight
+        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
 
         flights[airline][key].totalPremium = flights[airline][key].totalPremium.add(amount);     
 
-        insureeList[airline][key].push(insuranceReceiver);
+        insureeList[airline][key].push(insuree);             // add insuree to the flight's insuree list
 
-        insurees[airline][key][insuranceReceiver] = insureeDetail({
+        insurees[airline][key][insuree]= insureeInfo({
                                         insuranceAmount: amount,
                                         payout: 0
-                                });
+                                        });
+
     }
+
+    function getFlightPremium(address airline, string flightNumber, uint256 timestamp) external
+        requireIsOperational
+        isCallerAuthorized
+        returns(uint256)
+    {
+        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
+        return flights[airline][key].totalPremium;
+    }
+
+    function getInsureeList(address airline, string flightNumber, uint256 timestamp) external
+        requireIsOperational
+        isCallerAuthorized
+        returns(address [])
+    {
+        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
+        return insureeList[airline][key];
+    }
+
+    function getInsureeAmount(address airline, string flightNumber, uint256 timestamp, address insuree) external
+        requireIsOperational
+        isCallerAuthorized
+        returns(uint256)
+    {
+        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
+        return insurees[airline][key][insuree].insuranceAmount;
+    }
+
 
     /**
      *  @dev Credits payouts to insurees
     */
-    function creditInsurees
-                                (
-                                    address airline, string flightNumber, uint256 time
-                                )
-                                external
+    function creditInsurees(address airline, string flightNumber, uint256 timestamp) external
         requireIsOperational
-        onlyAuthorizedCaller
+        isCallerAuthorized 
     {
-        bytes32 key = keccak256(abi.encodePacked(flightNumber, time));
+        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
         address [] creditAccounts = insureeList[airline][key];
         uint256 accountsLength = creditAccounts.length;
 
-        require(accountsLength > 0, "insurees for the delayed flight not found");
+        require(accountsLength > 0, "No insurees for the delayed flight");
 
         for(uint256 i =0; i < accountsLength; i++){
             uint256 creditAmount = 0;
             address account = creditAccounts[i];
             creditAmount = insurees[airline][key][account].insuranceAmount.mul(3).div(2);
+            
+            // update insureeInfo of flight 
             insurees[airline][key][account].payout = creditAmount;
+
+            // update individal passenger account credit
             accountCredit[account] = accountCredit[account].add(creditAmount);
         }
+    }
+
+    function getAccountCredit(address account) external
+        requireIsOperational
+        isCallerAuthorized
+        returns(uint256)
+    {
+        return accountCredit[account];
     }
     
 
@@ -255,14 +393,9 @@ contract FlightSuretyData {
      *  @dev Transfers eligible payout funds to insuree
      *
     */
-    function pay
-                            (
-                                address account, uint256 amount
-                            )
-                            external
-                            payable
+    function pay(address account, uint256 amount) external payable  
         requireIsOperational
-        onlyAuthorizedCaller
+        isCallerAuthorized
     {
         accountCredit[account] = accountCredit[account].sub(amount);
         account.transfer(amount);
@@ -273,27 +406,31 @@ contract FlightSuretyData {
     *      resulting in insurance payouts, the contract should be self-sustaining
     *
     */   
-    function fund
-                            (   
-                                address account
-                            )
-                            public
-                            payable
+    function fund(address account) payable public
         requireIsOperational
-        onlyAuthorizedCaller
+        isCallerAuthorized
     {
         funding[account] = msg.value;
-        setAirlineOperateStatus(account, true);
+        setAirlineOperatingStatus(account, true);
     }
 
-    function getFlightKey
-                        (
-                            address airline,
-                            string memory flight,
-                            uint256 timestamp
-                        )
-                        internal
-                        returns(bytes32) 
+    function getFundingRecord(address account) public
+        requireIsOperational
+        returns(uint256)
+    {
+        uint256 record = funding[account];
+        return record;
+    }
+
+
+    function getFlightKey(
+        address airline,
+        string memory flight,
+        uint256 timestamp
+    )
+        pure
+        internal
+        returns(bytes32) 
     {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
     }
@@ -302,80 +439,11 @@ contract FlightSuretyData {
     * @dev Fallback function for funding smart contract.
     *
     */
-    function() 
-                            external 
-                            payable 
+    function() external payable 
     {
         fund(msg.sender);
     }
 
-    function getRegistrationStatus(address account) external 
-        requireIsOperational
-        onlyAuthorizedCaller
-        returns(bool)
-    {
-        return airlines[account].isRegistered;
-    }
-
-
-    function multiCallsLength() external 
-        requireIsOperational
-        onlyAuthorizedCaller 
-        returns(uint)
-    {
-        return multiCalls.length;
-    }
-
-    // mine
-
-    function setFlightStatusCode(address airline,string newFlight, uint256 timestamp, uint256 statusCode) external
-        requireIsOperational
-        onlyAuthorizedCaller
-    {
-        bytes32 key = keccak256(abi.encodePacked(newFlight, timestamp));
-        flights[airline][key].statusCode = statusCode;
-
-    }
-
-    function getFlightStatusCode(address airline, string flightNumber, uint256 timestamp) external
-        requireIsOperational
-        onlyAuthorizedCaller
-        returns(uint256)
-    {
-        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
-        uint256 status = flights[airline][key].statusCode;
-        return status;
-    }
-
-    function getFlightStatus(address airline, string flightNumber, uint256 timestamp) external
-        requireIsOperational
-        onlyAuthorizedCaller
-        returns(bool)
-    {
-        bytes32 key = keccak256(abi.encodePacked(flightNumber, timestamp));
-        bool status = flights[airline][key].isRegistered;
-        return status;
-    }
-
-    function getOperatingStatus(address account) external
-        requireIsOperational
-        onlyAuthorizedCaller
-        returns(bool)
-    {
-        return airlines[account].isOperational;
-    }
-
-    function addFlight(address airline,string newFlight, uint256 timestamp) external
-        requireIsOperational
-        onlyAuthorizedCaller
-    {
-        bytes32 key = keccak256(abi.encodePacked(newFlight, timestamp));
-        flightList[airline].push(key);
-        flights[airline][key].isRegistered = true;
-        flights[airline][key].totalPremium = 0;
-        flights[airline][key].statusCode = 0;
-
-    }
 
 }
 
